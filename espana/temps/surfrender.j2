@@ -59,7 +59,7 @@ bonds 1 waitfor all
 mol delrep 0 top
 mol representation CPK 0.900000 0.500000 37.000000 37.000000
 mol color Name
-mol selection {not name "H.*"}
+mol selection {not hydrogen}
 mol material BrushedMetal
 mol addrep top
 mol selupdate 0 top 0
@@ -94,12 +94,12 @@ mol clipplane status 5 0 top {0}
 mol showrep top 0 0
 mol representation VDW 0.900000 42.000000
 mol color Volume 0
-mol selection {all}
+mol selection {not hydrogen}
 mol material AOChalky
 mol addrep top
 mol selupdate 1 top 0
 mol colupdate 1 top 0
-mol scaleminmax top 1 -2.00000 2.000000
+mol scaleminmax top 1 -4.00000 4.000000
 mol smoothrep top 1 0
 mol drawframes top 1 {now}
 mol clipplane center 0 1 top {0.0 0.0 0.0}

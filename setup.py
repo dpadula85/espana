@@ -9,7 +9,7 @@ setup(
     author="Daniele Padula, Leonardo Barneschi",
     author_email="dpadula85@yahoo.it, leonardo.barneschi@student.unisi.it",
     description="A python package to compute coulomb electrostatic potentials",
-    url="",
+    url="https://github.com/dpadula85/espana",
     packages=setuptools.find_packages(),
     ext_modules=[ Extension('espana.inter', ['espana/inter.f90'],
                   extra_f90_compile_args=['-fopenmp', '-lgomp'],

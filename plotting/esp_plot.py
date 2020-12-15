@@ -45,6 +45,10 @@ import matplotlib.font_manager as fm
 from matplotlib import pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
 
+from espana.cube import Cube
+
+au2ang = 0.5291771
+
 # Matplotlib settings
 rcParams['text.usetex'] = True
 rcParams['text.latex.preamble'] = ( r'\usepackage{siunitx} ' 
@@ -113,7 +117,7 @@ def _plot_slice(yzp, **kwargs):
     # Other fancy stuff
     ax.set_xlabel(r'$x$ / \si{\angstrom}')
     ax.set_ylabel(r'$y$ / \si{\angstrom}')
-    # cbar.set_label(r'$V_{Coul}$ / \si{\volt}', labelpad=10)
+    cbar.set_label(r'$V_{Coul}$ / \si{\volt}', labelpad=10)
 
     off = 0.1
     ax.set_xlim(ax.get_xlim()[0] + off, ax.get_xlim()[1] - off)
@@ -216,17 +220,76 @@ def read_dx_esp(fname):
     return xyzv
 
 
-if __name__ == "__main__":
+def main():
+    '''
+    Cli call function.
+    '''
 
-    fname = sys.argv[1]
-    xyzv = read_dx_esp(fname)
+    import argparse as arg
+    import MDAnalysis as mda
+
+    # Define cli options
+    parser = arg.ArgumentParser(description='''Makes a grid of points around
+                                an input geometry.''',
+                                formatter_class=arg.ArgumentDefaultsHelpFormatter)
+
+    # Input options
+    inp = parser.add_argument_group('Input Data')
+
+    inp.add_argument('-i', '--inp', required=True, type=str, dest='InpFile',
+                     help='''Geometry Input File.''')
+
+    inp.add_argument('-s', '--sil', default=None, type=str, dest='SilFile',
+                     help='''Silhouette Input File.''')
+
+    # Output options
+    out = parser.add_argument_group('Output Options')
+
+    out.add_argument('-o', '--out', default='grid', type=str, dest='OutRoot',
+                     help='''Output File.''')
+
+    out.add_argument('--fmt', default=['xyz', 'cub'], type=str, nargs='+',
+                     choices=[ 'xyz' , 'cub', 'dx' ], dest='OutFile',
+                     help='''Output file format.''')
+
+
+    # Parse options
+    args = parser.parse_args()
+    kwargs = vars(args)
+
+
+    read_esp_fns = [ read_xyz_esp, read_cub_esp, read_dx_esp ]
+    for fn in read_esp_fns:
+        try:
+            xyzv = fn(kwargs['InpFile'])
+            break
+        except:
+            continue
+
     yzv = np.c_[ xyzv[:,:2], xyzv[:,-1] ]
-
     ax, fig =_plot_slice(yzv)
 
-    # read silhouette
-    ats = np.loadtxt(sys.argv[2], skiprows=2, usecols=[0], dtype=str)
-    sil = np.loadtxt(sys.argv[2], skiprows=2, usecols=[1, 2, 3])
-    ax, fig = _plot_silhouette(sil[ats != "H" ], ax, fig)
+    if kwargs['SilFile']:
+        ats = np.loadtxt(kwargs['SilFile'], skiprows=2, usecols=[0], dtype=str)
+        sil = np.loadtxt(kwargs['SilFile'], skiprows=2, usecols=[1, 2, 3])
+        ax, fig = _plot_silhouette(sil[ats != "H" ], ax, fig)
 
     plt.show()
+    return
+
+
+if __name__ == "__main__":
+    
+    main()
+    # fname = sys.argv[1]
+    # xyzv = read_dx_esp(fname)
+    # yzv = np.c_[ xyzv[:,:2], xyzv[:,-1] ]
+
+    # ax, fig =_plot_slice(yzv)
+
+    # # read silhouette
+    # ats = np.loadtxt(sys.argv[2], skiprows=2, usecols=[0], dtype=str)
+    # sil = np.loadtxt(sys.argv[2], skiprows=2, usecols=[1, 2, 3])
+    # ax, fig = _plot_silhouette(sil[ats != "H" ], ax, fig)
+
+    # plt.show()

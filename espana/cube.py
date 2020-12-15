@@ -85,7 +85,7 @@ class Cube:
 
         N = self.NX * self.NY * self.NZ
 
-        return grid.reshape(N, 3)
+        return grid.reshape(N, 3, order="F")
 
 
     def dump(self, fname):
