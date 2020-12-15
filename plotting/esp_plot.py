@@ -287,21 +287,8 @@ def main():
         outname = basename + '.' + kwargs['save']
         plt.savefig(outname, dpi=1200, transparent=True)
 
-    return
+    return ax, fig
 
 
 if __name__ == "__main__":
-    
     main()
-    # fname = sys.argv[1]
-    # xyzv = read_dx_esp(fname)
-    # yzv = np.c_[ xyzv[:,:2], xyzv[:,-1] ]
-
-    # ax, fig =_plot_slice(yzv)
-
-    # # read silhouette
-    # ats = np.loadtxt(sys.argv[2], skiprows=2, usecols=[0], dtype=str)
-    # sil = np.loadtxt(sys.argv[2], skiprows=2, usecols=[1, 2, 3])
-    # ax, fig = _plot_silhouette(sil[ats != "H" ], ax, fig)
-
-    # plt.show()
