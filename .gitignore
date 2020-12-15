@@ -1,0 +1,6 @@
+*.pyc
+*.so
+*.pth
+*egg*
+*build*
+*compute_esp*
