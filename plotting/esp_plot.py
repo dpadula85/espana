@@ -252,11 +252,16 @@ def main():
                      choices=[ 'xyz' , 'cub', 'dx' ], dest='OutFile',
                      help='''Output file format.''')
 
+    out.add_argument('--save', default=None, type=str,
+                     help='''Save the plot as an image. Specify the extension.''')
+
+    out.add_argument('--show', default=False, action='store_true',
+                     help='''Show the plot in an external window.''')
+
 
     # Parse options
     args = parser.parse_args()
     kwargs = vars(args)
-
 
     read_esp_fns = [ read_xyz_esp, read_cub_esp, read_dx_esp ]
     for fn in read_esp_fns:
@@ -274,7 +279,14 @@ def main():
         sil = np.loadtxt(kwargs['SilFile'], skiprows=2, usecols=[1, 2, 3])
         ax, fig = _plot_silhouette(sil[ats != "H" ], ax, fig)
 
-    plt.show()
+    if kwargs['show']:
+        plt.show()
+
+    if kwargs['save'] is not None:
+        basename = '.'.join(kwargs['InpFile'].split('.')[:-1])
+        outname = basename + '.' + kwargs['save']
+        plt.savefig(outname, dpi=1200, transparent=True)
+
     return
 
 
