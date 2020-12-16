@@ -82,6 +82,29 @@ contour_params = { 'vmin': -4.0,
                    }
 
 
+def centroid(coords, masses=None):
+    '''
+    Function to compute the centre (or the centre of mass) of a set of
+    coordinates.
+
+    Parameters
+    ----------
+    coord: np.array (N,3).
+        coordinates.
+    masses: np.array (N) (default: None).
+        masses.
+
+    Returns
+    -------
+    com: np.array (3).
+        centre (or centre of mass) of the set of coordinates.
+    '''
+
+    com = np.average(coords, axis=0, weights=masses)
+
+    return com
+
+
 def _plot_slice(yzp, **kwargs):
 
     # Data processing
@@ -271,13 +294,16 @@ def main():
         except:
             continue
 
+    com = centroid(xyzv[:,:-1])
+    xyzv[:,:-1] -= com
     yzv = np.c_[ xyzv[:,:2], xyzv[:,-1] ]
     ax, fig =_plot_slice(yzv)
 
     if kwargs['SilFile']:
-        ats = np.loadtxt(kwargs['SilFile'], skiprows=2, usecols=[0], dtype=str)
+        ats = np.loadtxt(kwargs['SilFile'], skiprows=2, usecols=[0])
         sil = np.loadtxt(kwargs['SilFile'], skiprows=2, usecols=[1, 2, 3])
-        ax, fig = _plot_silhouette(sil[ats != "H" ], ax, fig)
+        sil -= com
+        ax, fig = _plot_silhouette(sil[ats != 1 ], ax, fig)
 
     if kwargs['show']:
         plt.show()
