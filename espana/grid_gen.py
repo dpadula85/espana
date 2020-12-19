@@ -116,7 +116,7 @@ def make_grid(**kwargs):
 
     # Here is a vectorised version of the nested for loop
     # Make grid of displacements along each basis vector
-    g = np.meshgrid(i, j, k)
+    g = np.meshgrid(i, j, k, indexing='ij')
 
     # Convert to a more natural format, one column for each basis vector
     grid = np.vstack(list(map(np.ravel, g))).T
