@@ -135,7 +135,7 @@ def proj(pts, basis):
     ----------
     pts: np.array (N,M).
         set of points
-    basis: np.array (M - 1).
+    basis: np.array (M - P).
         subspace basis.
 
     Returns
