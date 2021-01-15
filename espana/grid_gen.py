@@ -127,16 +127,16 @@ def make_grid(**kwargs):
     return grid
 
 
-def proj(pts, coeffs):
+def proj(pts, basis):
     '''
-    Function to compute projections of a set of points onto a plane.
+    Function to compute projections of a set of points onto a subspace.
 
     Parameters
     ----------
     pts: np.array (N,M).
         set of points
-    coeffs: np.array (M).
-        normal vector describing the plane.
+    basis: np.array (M - 1).
+        subspace basis.
 
     Returns
     -------
@@ -144,29 +144,13 @@ def proj(pts, coeffs):
         set of points projected onto the plane.
     '''
 
-    # For each point p in pts we should do
-    # prj = p - np.dot(p, u) * u
-    # where u is the normal unit vector.
+    # Find coefficients for basis vectors for the projection of each point
+    # onto the subspace described by basis
+    coeffs, res, rank, singular_values = np.linalg.lstsq(basis, pts.T,
+                                                         rcond=None)
 
-    # Compute normal unit vector
-    u = coeffs / np.linalg.norm(coeffs)
-
-    # Here is a vectorised version of the projection formula
-    # Compute elementwise dot products between pts and u.
-    # Deal with the case of a single point as an exception.
-    try:
-        dotprods = np.einsum('ij,ij->i', pts, u.reshape(1,-1))
-    except:
-        dotprods = np.einsum('ij,ij->i', pts.reshape(-1,u.shape[0]), u.reshape(1,-1))
-
-    # Repeat dot products and unit vector for elementwise mult to be
-    # subtracted from originary coordinates
-    dotprodsmat = np.repeat(dotprods.reshape(-1,1), u.shape[0], axis=1)
-    umat = np.repeat(u.reshape(1,-1), dotprods.shape[0], axis=0)
-
-    # Subtract the components along the normal to the plane from the
-    # originary coordinates
-    prjs = pts - dotprodsmat * umat
+    # Project points onto the subspace described by basis
+    prjs = np.dot(basis, coeffs).T
 
     return prjs
 
@@ -353,19 +337,21 @@ def grid_gen(pts, **kwargs):
         # Define plane unit vector
         plane = plane / np.linalg.norm(plane)
 
-        # Get com projection on the plane
-        prjcom = proj(com, plane)
+        # Define plane local basis. Basis vectors are columns
+        # Each basis vector corresponds to the cartesian basis,
+        # thus the last column is normal to the plane.
+        ref = make_plane_basis(plane)
+
+        # Get com projection onto the plane
+        prjcom = proj(com, ref[:,:-1])
 
         # Project all points on the plane
         if selg is not None:
-            prjs = proj(pts[selg], plane)
+            prjs = proj(pts[selg], ref[:,:-1])
             pts2 = pts[selg]
         else:
-            prjs = proj(pts, plane)
+            prjs = proj(pts, ref[:,:-1])
             pts2 = pts
-
-        # Define plane local basis
-        ref = make_plane_basis(plane)
 
         # Find displacements of basis vectors enclosing prjs
         # This means to find the highest dot product between each of prjs and
