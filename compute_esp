@@ -1,0 +1,7 @@
+#!/home/dpadula/anaconda3/envs/working/bin/python
+# EASY-INSTALL-DEV-SCRIPT: 'ESPAna==1.0','compute_esp'
+__requires__ = 'ESPAna==1.0'
+__import__('pkg_resources').require('ESPAna==1.0')
+__file__ = '/home/dpadula/software/espana/espana/bin/compute_esp'
+with open(__file__) as f:
+    exec(compile(f.read(), __file__, 'exec'))

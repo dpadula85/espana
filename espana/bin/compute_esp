@@ -1,0 +1,390 @@
+#!/usr/bin/env python
+
+import os
+import sys
+import numpy as np
+import argparse as arg
+import MDAnalysis as mda
+from gridData import OpenDX, Grid
+from rdkit.Chem import GetPeriodicTable
+from jinja2 import Environment, FileSystemLoader
+
+import warnings
+if not sys.warnoptions:
+        warnings.simplefilter("ignore")
+
+from espana import temps
+from espana.cube import Cube
+from espana.grid_gen import *
+from espana.selections import *
+from espana import interactions
+
+au2ang = 0.5291771
+ang2au = 1 / au2ang
+au2eV = 27.21138505
+
+
+def vmdsurfrender(mymol, gridpot, template=None, expath='vis.vmd', render=False):
+
+    if template is None:
+        tempath = os.path.dirname(temps.__file__)
+        template = os.path.join(tempath, 'surfrender.j2')
+
+    # Guess mymol format
+    try:
+        moltype = mda.Universe(mymol)._trajectory.format.lower()
+    except:
+        pass
+
+    # Try to read dx with MDA, if not possible assign cube
+    try:
+        g = Grid(gridpot)
+        gridtype = 'dx'
+    except:
+        gridtype = 'cube'
+        moltype = 'cube'
+
+    file_loader = FileSystemLoader(os.path.dirname(template))
+    env = Environment(loader=file_loader)
+    template = env.get_template(os.path.basename(template))
+    vmdtemp = template.render(mymol=mymol, moltype=moltype,
+                              gridpot=gridpot, gridtype=gridtype,
+                              render=render)
+
+    with open(expath, "w") as f:
+        f.write(vmdtemp)
+
+    return expath
+
+
+def read_xyz_grid(fname):
+    '''
+    Wrapper function to read grid coordinates from an xyz file.
+
+    Parameters
+    ----------
+    fname: str.
+        filename to read.
+
+    Returns
+    -------
+    grid: np.array (N, 3).
+        coordinates of the grid.
+    '''
+
+    grid = np.loadtxt(fname, skiprows=2, usecols=[1,2,3])
+
+    return grid
+
+
+def read_cub_grid(fname):
+    '''
+    Wrapper function to read grid coordinates from a cube file.
+
+    Parameters
+    ----------
+    fname: str.
+        filename to read.
+
+    Returns
+    -------
+    grid: np.array (N, 3).
+        coordinates of the grid.
+    '''
+
+    c = Cube(fname)
+
+    return c.grid * au2ang
+
+
+def read_dx_grid(fname):
+    '''
+    Wrapper function to read grid coordinates from a dx file.
+
+    Parameters
+    ----------
+    fname: str.
+        filename to read.
+
+    Returns
+    -------
+    grid: np.array (N, 3).
+        coordinates of the grid.
+    '''
+
+    g = Grid(fname)
+    o = g.origin
+    d = g.delta
+    nx, ny, nz = g.grid.shape
+    grid = np.zeros((nx, ny, nz, 3))
+    for i in range(nx):
+        for j in range(ny):
+            for k in range(nz):
+                grid[i,j,k,0] = o[0] + i * d[0]
+                grid[i,j,k,1] = o[1] + j * d[1]
+                grid[i,j,k,2] = o[2] + k * d[2]
+
+    grid = grid.reshape(nx * ny * nz, 3)
+
+    return grid
+
+
+def fix_mda_names(atoms):
+    '''
+    Function to correct MDAnalysis atom names that make RDKit crash.
+
+    Parameters
+    ----------
+    atoms: list or np.array (N).
+        list of atom names.
+
+    Returns
+    -------
+    names: list or np.array (N).
+        list of atom names.
+    '''
+
+    names = np.array([ a[0] + a[1:].lower() for a in atoms ], dtype=str)
+
+    return names
+
+
+def compute_esp(**kwargs):
+
+    # Remove conflicting options
+    if kwargs['type'] == 'vdw' or kwargs['type'] == 'hollow':
+        kwargs['OutFile'] = [ 'xyz' ]
+
+    # Import periodic table for chemical data
+    pt = GetPeriodicTable()
+
+    # Read structure
+    u = mda.Universe(kwargs['InpFile'])
+
+    # Get data needed to do calculations
+    pts = u.atoms.positions
+    atoms = fix_mda_names(u.atoms.types)
+    masses = np.array([ pt.GetAtomicWeight(x) for x in atoms ])
+
+    try:
+        radii = u.atoms.radii
+    except:
+        radii = np.array([ pt.GetRvdw(x) for x in atoms ])
+
+    try:
+        qs = u.atoms.charges
+    except:
+        qs = np.ones(pts.shape[0])
+
+    kwargs['chgs'] = qs
+    kwargs['radii'] = radii
+    kwargs['masses'] = masses
+
+    # Get idxs of the selection
+    if kwargs['sel']:
+        sels = read_sel(kwargs['sel'])
+        idxs = []
+        for sel in sels:
+            selidxs = u.atoms.select_atoms(sel).indices
+            idxs.extend(selidxs)
+
+        idxs = np.array(idxs)
+        kwargs['sel'] = idxs
+
+    # Get idxs of the pi systems
+    if kwargs['pi']:
+        sels = read_sel(kwargs['pi'])
+        piidxs = []
+        for sel in sels:
+            selidxs = get_pi_system(u.atoms.select_atoms(sel))
+            piidxs.extend(selidxs)
+
+        piidxs = np.array(piidxs)
+        kwargs['pi'] = piidxs
+
+    #
+    # 1 - compute grid
+    #
+
+    # Try to read various grid formats
+    grid = None
+    if kwargs['GridFile'] is not None:
+
+        read_grid_fns = [ read_xyz_grid, read_cub_grid, read_dx_grid ]
+
+        for fn in read_grid_fns:
+            try:
+                grid = fn(kwargs['GridFile'])
+                prjs = None
+                U = np.eye(3)
+                break
+            except:
+                continue
+
+    # Call function to compute grid if no grid is provided or read
+    if grid is None:
+        grid, prjs, U = grid_gen(pts, **kwargs)
+
+    #
+    # 2 - compute potential on such grid
+    #
+
+    # Convert coordinates to au for the calculation and compute potential
+    V = interactions.get_potential_fort(pts * ang2au, qs, grid * ang2au,
+                                        d=kwargs['smooth'])
+
+    #
+    # 3 - save grid in some format
+    #
+    # Transform data aligning them to the cartesian basis to deal with
+    # annoying cube / dx format
+    com = centroid(pts, masses)
+    pts = np.dot(U.T, (pts - com).T).T + com
+    prjs = np.dot(U.T, (prjs - com).T).T + com
+    grid = np.dot(U.T, (grid - com).T).T + com
+    deltas = np.diag(np.amax(np.diff(grid, axis=0), axis=0))
+
+    if 'xyz' in kwargs['OutFile']:
+        outname = kwargs['OutRoot'] + '.xyz'
+        with open(outname, 'w') as f:
+            f.write('%d\n' % grid.shape[0])
+            titles = [ 'Dummy atom', 'X', 'Y', 'Z', 'V (volt)' ]
+            f.write('%10s ' * len(titles) % tuple(titles))
+            f.write('\n')
+            np.savetxt(f, np.c_[ np.ones(grid.shape[0]), grid , V * au2eV ],
+                       fmt='%-10d %10.6f %10.6f %10.6f %10.6f')
+
+    if 'cub' in kwargs['OutFile'] or 'dx' in kwargs['OutFile']:
+    
+        if kwargs['nx'] == 0:
+            kwargs['nx'] = 1
+    
+        if kwargs['ny'] == 0:
+            kwargs['ny'] = 1
+    
+        if kwargs['nz'] == 0:
+            kwargs['nz'] = 1
+   
+        if kwargs['sel'] is not None:
+            pts = pts[kwargs['sel']]
+            atoms = atoms[kwargs['sel']]
+
+        voldata = { 'atoms'  : np.array([ pt.GetAtomicNumber(x) for x in atoms ]),
+                    'natoms' : atoms.shape[0],
+                    'coords' : pts * ang2au,
+                    'origin' : np.amin(grid, axis=0) * ang2au,
+                    'X'      : deltas[0] * ang2au,
+                    'Y'      : deltas[1] * ang2au,
+                    'Z'      : deltas[2] * ang2au,
+                    'NX'     : kwargs['nx'],
+                    'NY'     : kwargs['ny'],
+                    'NZ'     : kwargs['nz'],
+                    'grid'   : grid * ang2au,
+                    'data'   : V * au2eV
+                    }
+    
+        if 'cub' in kwargs['OutFile']:
+            outname = kwargs['OutRoot'] + '.cub'
+            cubobj = Cube(**voldata)
+            cubobj.dump(outname)
+            vmdsurfrender(outname, outname)
+    
+        if 'dx' in kwargs['OutFile']:
+            outname = kwargs['OutRoot'] + '.dx'
+            shape = ( voldata['NX'], voldata['NY'], voldata['NZ'] )
+            origin = voldata['origin'] * au2ang
+            delta = deltas
+            dx = OpenDX.field('density', components=dict(
+                positions=OpenDX.gridpositions(1, shape, origin, delta),
+                connections=OpenDX.gridconnections(2, shape),
+                data=OpenDX.array(3, voldata['data'])
+                ))
+            dx.write(outname)
+
+    if kwargs['sil']:
+
+        if kwargs['sel'] is not None:
+            atoms = atoms[kwargs['sel']]
+
+        atoms = np.array([ pt.GetAtomicNumber(x) for x in atoms ])
+        outname = kwargs['OutRoot'] + '.sil.xyz'
+        with open(outname, 'w') as f:
+            f.write('%d\n\n' % prjs.shape[0])
+            np.savetxt(f, np.c_[ atoms, prjs ],
+                       fmt='%-5s %10.6f %10.6f %10.6f')
+
+    return
+
+
+def options():
+
+    # Define cli options
+    parser = arg.ArgumentParser(description='''Makes a grid of points around
+                                an input geometry.''',
+                                formatter_class=arg.ArgumentDefaultsHelpFormatter)
+
+    # Input options
+    inp = parser.add_argument_group('Input Data')
+
+    inp.add_argument('-i', '--inp', required=True, type=str, dest='InpFile',
+                     help='''Geometry Input File.''')
+
+    inp.add_argument('-g', '--grid', required=False, type=str, dest='GridFile',
+                     help='''Grid Input. Grid computations will be skipped.''')
+
+    # Calculation options
+    calc = parser.add_argument_group('Calculation Options')
+
+    calc.add_argument('--sel', default=None, dest='sel', type=str,
+                      help='''Selection of atoms to define grid.''')
+
+    calc.add_argument('--pi', default='all', dest='pi', type=str,
+                      help='''Subselection of sel to look for pi systems.''')
+
+    calc.add_argument('--type', default='cub', type=str, dest='type',
+                      choices=['cub', 'vdw', 'hollow'],
+                      help='''Desired grid type.''')
+
+    calc.add_argument('--nx', default=50, type=int, dest='nx',
+                      help='''Number of points along the first basis
+                      vector.''')
+
+    calc.add_argument('--ny', default=50, type=int, dest='ny',
+                      help='''Number of points along the second basis
+                      vector.''')
+
+    calc.add_argument('--nz', default=50, type=int, dest='nz',
+                      help='''Number of points along the third basis
+                      vector.''')
+
+    calc.add_argument('-d', '--density', default=10, type=int, dest='density',
+                      help='''Density of points on VdW spheres.''')
+
+    calc.add_argument('--smooth', default=1e-8, type=float, dest='smooth',
+                      help='''Distance threshold for smoothing charges in the
+                      potential calculations.''')
+
+    # Output options
+    out = parser.add_argument_group('Output Options')
+
+    out.add_argument('-o', '--out', default='grid', type=str, dest='OutRoot',
+                     help='''Output File.''')
+
+    out.add_argument('--fmt', default=['xyz', 'cub'], type=str, nargs='+',
+                     choices=[ 'xyz' , 'cub', 'dx' ], dest='OutFile',
+                     help='''Output file format.''')
+
+    out.add_argument('--sil', default=False, action='store_true', dest='sil',
+                     help='''Output project points.''')
+
+    # Parse options
+    args = parser.parse_args()
+    opts = vars(args)
+
+    return opts
+
+
+if __name__ == '__main__':
+    opts = options()
+    compute_esp(**opts)
+    pass

@@ -3,8 +3,6 @@
 *.pth
 *egg*
 *build*
-*compute_esp*
-*grid_gen*
 *.pqr
 *.cub
 *.dx
