@@ -551,7 +551,10 @@ def main():
     # Get data needed to do calculations
     pts = u.atoms.positions
     atoms = u.atoms.types
-    masses = np.array([ pt.GetAtomicWeight(x) for x in atoms ])
+    try:
+        masses = u.atoms.masses
+    except:
+        masses = np.array([ pt.GetAtomicWeight(x) for x in atoms ])
 
     try:
         radii = u.atoms.radii
