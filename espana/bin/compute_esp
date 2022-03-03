@@ -303,8 +303,8 @@ def compute_esp(**kwargs):
 
     if kwargs['sil']:
 
-        if kwargs['sel'] is not None:
-            atoms = atoms[kwargs['sel']]
+        # if kwargs['sel'] is not None:
+        #     atoms = atoms[kwargs['sel']]
 
         atoms = np.array([ pt.GetAtomicNumber(x) for x in atoms ])
         outname = kwargs['OutRoot'] + '.sil.xyz'
