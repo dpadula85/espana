@@ -25,16 +25,16 @@ def get_pi_system(sel):
 
     # Use -1 as placeholder for non-existing bonds
     conn = np.ones((len(sel.atoms), 4)) * -1
-    for bond in bds:
+    for i, bond in enumerate(bds):
         at1, at2 = bond
-        for j in np.arange(conn[at1].shape[0]):
-            if conn[at1,j] == -1:
-                conn[at1,j] = at2
+        for j in np.arange(conn[i].shape[0]):
+            if conn[i,j] == -1:
+                conn[i,j] = at2
                 break
 
-        for j in np.arange(conn[at2].shape[0]):
-            if conn[at2,j] == -1:
-                conn[at2,j] = at1
+        for j in np.arange(conn[i].shape[0]):
+            if conn[i,j] == -1:
+                conn[i,j] = at1
                 break
 
     # Get heavy atoms
